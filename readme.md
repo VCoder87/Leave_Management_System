@@ -10,7 +10,7 @@ A comprehensive Human Resource Management System (HRMS) built with Django for ma
 - **Employee**: Apply for leaves, view leave history, manage profile.
 
 ### 📅 Leave Management
-- **Apply for Leave**: Employees can apply for Casual, Sick, or Earned leaves.
+- **Apply for Leave**: Employees can apply for Casual and Sick.
 - **Approval Workflow**: Managers can review and approve or reject leave requests.
 - **Leave History**: Employees can track their past and current leave status.
 - **Cancellation**: Option to cancel pending leave requests.
@@ -29,7 +29,7 @@ A comprehensive Human Resource Management System (HRMS) built with Django for ma
 
 - **Backend**: Python, Django 6.0
 - **Database**: PostgreSQL / SQLite (Configurable)
-- **Authentication**: JWT / Session-based
+- **Authentication**: JWT 
 - **Frontend**: Django Templates (HTML/CSS)
 
 ## 📦 Installation & Setup
@@ -42,7 +42,7 @@ Follow these steps to set up the project locally.
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/leave-management-system.git
+git clone https://github.com/VCoder87/Leave_Management_System
 cd leave_management_system
 ```
 
@@ -107,7 +107,7 @@ Visit `http://127.0.0.1:8000/` in your browser.
 ## 🔗 Key API Endpoints / Routes
 
 | Feature | Endpoint | Description |
-| hum | hum | hum |
+|---|---|---|
 | **Login** | `/login/` | User login page |
 | **Apply Leave** | `/leave/apply/` | Form to apply for new leave |
 | **Leave History** | `/leave-history/` | View employee's leave history |
@@ -124,6 +124,3 @@ Visit `http://127.0.0.1:8000/` in your browser.
 4. Push to the branch (`git push origin feature/YourFeature`).
 5. Open a Pull Request.
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

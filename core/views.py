@@ -12,9 +12,11 @@ from core.models import User, Role, Leave, LeaveDocument
 from core.permissions import is_employee, is_manager
 from core.utils.email_service import send_leave_status_email
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
-
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from datetime import datetime
 
 @method_decorator(csrf_exempt, name='dispatch')
 class LoginView(View):
@@ -28,21 +30,21 @@ class LoginView(View):
 class CreateEmployeeView(View):
     def post(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (ADMIN ONLY)
+        #Authorization check (ADMIN ONLY)
         if not is_admin(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Admin access only.'},
                 status=403
             )
 
-        # 📥 Parse JSON body
+        #Parse JSON body
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
@@ -52,7 +54,7 @@ class CreateEmployeeView(View):
         password = data.get('password')
         name = data.get('name')
 
-        # 🔁 NOW THIS IS MANAGER'S EMPLOYEE_ID (e.g. "MGR001")
+        #NOW THIS IS MANAGER'S EMPLOYEE_ID (e.g. "MGR001")
         manager_employee_id = data.get('manager_id')
 
         employee_business_id = data.get('employee_id')
@@ -65,13 +67,13 @@ class CreateEmployeeView(View):
                 status=400
             )
 
-        # 🔍 Fetch EMPLOYEE role
+        #Fetch EMPLOYEE role
         try:
             employee_role = Role.objects.get(role_name='EMPLOYEE')
         except Role.DoesNotExist:
             return JsonResponse({'error': 'EMPLOYEE role not found'}, status=500)
 
-        # 🔍 Fetch manager USING employee_id (NOT PK)
+        #Fetch manager USING employee_id (NOT PK)
         try:
             manager = User.objects.get(employee_id=manager_employee_id)
         except User.DoesNotExist:
@@ -80,28 +82,28 @@ class CreateEmployeeView(View):
                 status=404
             )
 
-        # 🔐 Validate manager role
+        #Validate manager role
         if manager.role.role_name != 'MANAGER':
             return JsonResponse(
                 {'error': 'Assigned user is not a manager'},
                 status=400
             )
 
-        # 🚫 Prevent duplicate email
+        #Prevent duplicate email
         if User.objects.filter(email=email).exists():
             return JsonResponse(
                 {'error': 'User with this email already exists'},
                 status=400
             )
 
-        # 🚫 Prevent duplicate employee_id
+        #Prevent duplicate employee_id
         if User.objects.filter(employee_id=employee_business_id).exists():
             return JsonResponse(
                 {'error': 'Employee ID already exists'},
                 status=400
             )
 
-        # ✅ Create employee
+        #Create employee
         employee = User.objects.create_user(
             email=email,
             password=password,
@@ -127,21 +129,21 @@ class CreateEmployeeView(View):
 class CreateManagerView(View):
     def post(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (ADMIN ONLY)
+        #Authorization check (ADMIN ONLY)
         if not is_admin(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Admin access only.'},
                 status=403
             )
 
-        # 📥 Parse JSON body
+        #Parse JSON body
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
@@ -158,21 +160,21 @@ class CreateManagerView(View):
                 status=400
             )
 
-        # 🚫 Prevent duplicate email
+        #Prevent duplicate email
         if User.objects.filter(email=email).exists():
             return JsonResponse(
                 {'error': 'User with this email already exists'},
                 status=400
             )
 
-        # 🚫 Prevent duplicate employee_id (if provided)
+        #Prevent duplicate employee_id (if provided)
         if employee_id and User.objects.filter(employee_id=employee_id).exists():
             return JsonResponse(
                 {'error': 'Employee ID already exists'},
                 status=400
             )
 
-        # 🔍 Get MANAGER role
+        #Get MANAGER role
         try:
             manager_role = Role.objects.get(role_name='MANAGER')
         except Role.DoesNotExist:
@@ -181,7 +183,7 @@ class CreateManagerView(View):
                 status=500
             )
 
-        # ✅ Create manager (NO manager assignment)
+        #Create manager (NO manager assignment)
         manager = User.objects.create_user(
             email=email,
             password=password,
@@ -189,7 +191,7 @@ class CreateManagerView(View):
             role=manager_role
         )
 
-        # Optional business employee_id
+        #Optional business employee_id
         if employee_id:
             manager.employee_id = employee_id
             manager.save()
@@ -211,7 +213,7 @@ from core.models import Leave, LeaveDocument
 class ApplyLeaveView(View):
     def post(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
@@ -220,7 +222,7 @@ class ApplyLeaveView(View):
 
         leave_type = request.POST.get('leave_type')
 
-        # 📎 Sick leave document validation
+        #Sick leave document validation
         if leave_type == 'SICK':
             if 'document' not in request.FILES:
                 return JsonResponse(
@@ -230,7 +232,7 @@ class ApplyLeaveView(View):
 
             document = request.FILES['document']
 
-            # 🔒 File size validation (2 MB)
+            #File size validation (2 MB)
             MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
             if document.size > MAX_FILE_SIZE:
                 return JsonResponse(
@@ -241,7 +243,7 @@ class ApplyLeaveView(View):
                     status=400
                 )
 
-        # 📄 Create leave
+        #Create leave
         leave = Leave.objects.create(
             user=request.user,
             leave_type=leave_type,
@@ -250,7 +252,7 @@ class ApplyLeaveView(View):
             reason=request.POST.get('reason')
         )
 
-        # 📎 Save document if present
+        #Save document if present
         if 'document' in request.FILES:
             LeaveDocument.objects.create(
                 leave=leave,
@@ -280,21 +282,21 @@ class ApproveLeaveView(View):
 class EmployeeLeaveHistoryView(View):
     def get(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (EMPLOYEE ONLY)
+        #Authorization check (EMPLOYEE ONLY)
         if not is_employee(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Employee access only.'},
                 status=403
             )
 
-        # 📄 Fetch leave history for logged-in employee
+        #Fetch leave history for logged-in employee
         leaves = Leave.objects.filter(user=request.user).order_by('-start_date')
 
         leave_data = []
@@ -322,21 +324,21 @@ class EmployeeLeaveHistoryView(View):
 class ManagerPendingLeavesView(View):
     def get(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (MANAGER ONLY)
+        #Authorization check (MANAGER ONLY)
         if not is_manager(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Manager access only.'},
                 status=403
             )
 
-        # 📄 Fetch pending leaves of employees under this manager
+        #Fetch pending leaves of employees under this manager
         leaves = Leave.objects.filter(
             user__manager=request.user,
             status='PENDING'
@@ -365,21 +367,21 @@ class ManagerPendingLeavesView(View):
 class ManagerDashboardLeavesView(View):
     def get(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (MANAGER ONLY)
+        #Authorization check (MANAGER ONLY)
         if not is_manager(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Manager access only.'},
                 status=403
             )
 
-        # 📄 Fetch ALL leaves of employees under this manager
+        #Fetch ALL leaves of employees under this manager
         leaves = (
             Leave.objects
             .filter(user__manager=request.user)
@@ -425,21 +427,21 @@ class ManagerDashboardLeavesView(View):
 class AdminDashboardLeavesView(View):
     def get(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (ADMIN ONLY)
+        #Authorization check (ADMIN ONLY)
         if not is_admin(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Admin access only.'},
                 status=403
             )
 
-        # 📄 Fetch all managers
+        #Fetch all managers
         managers = User.objects.filter(role__role_name='MANAGER')
 
         dashboard_data = []
@@ -504,21 +506,21 @@ class AdminDashboardLeavesView(View):
 class EditPendingLeaveView(View):
     def put(self, request, leave_id):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (EMPLOYEE ONLY)
+        #Authorization check (EMPLOYEE ONLY)
         if not is_employee(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Employee access only.'},
                 status=403
             )
 
-        # 🔍 Fetch leave
+        #Fetch leave
         try:
             leave = Leave.objects.get(id=leave_id, is_active=True)
         except Leave.DoesNotExist:
@@ -527,14 +529,14 @@ class EditPendingLeaveView(View):
                 status=404
             )
 
-        # 🔐 Ownership check
+        #Ownership check
         if leave.user != request.user:
             return JsonResponse(
                 {'error': 'You are not allowed to edit this leave'},
                 status=403
             )
 
-        # 🚫 Status check
+        #Status check
         if leave.status != 'PENDING':
             return JsonResponse(
                 {
@@ -544,13 +546,13 @@ class EditPendingLeaveView(View):
                 status=400
             )
 
-        # 📥 Parse request body
+        #Parse request body
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        # ✏️ Editable fields
+        #Editable fields
         leave_type = data.get('leave_type')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
@@ -562,7 +564,7 @@ class EditPendingLeaveView(View):
                 status=400
             )
 
-        # ✅ Apply updates
+        #Apply updates
         if leave_type:
             leave.leave_type = leave_type
         if start_date:
@@ -586,21 +588,21 @@ class EditPendingLeaveView(View):
 class CancelPendingLeaveView(View):
     def post(self, request, leave_id):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (EMPLOYEE ONLY)
+        #Authorization check (EMPLOYEE ONLY)
         if not is_employee(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Employee access only.'},
                 status=403
             )
 
-        # 🔍 Fetch active leave
+        #Fetch active leave
         try:
             leave = Leave.objects.get(id=leave_id, is_active=True)
         except Leave.DoesNotExist:
@@ -609,14 +611,14 @@ class CancelPendingLeaveView(View):
                 status=404
             )
 
-        # 🔐 Ownership check
+        #Ownership check
         if leave.user != request.user:
             return JsonResponse(
                 {'error': 'You are not allowed to cancel this leave'},
                 status=403
             )
 
-        # 🚫 Status check
+        #Status check
         if leave.status == 'APPROVED':
             return JsonResponse(
                 {'error': 'Approved leave cannot be cancelled'},
@@ -635,7 +637,7 @@ class CancelPendingLeaveView(View):
                 status=400
             )
 
-        # ✅ Soft cancel leave
+        #Soft cancel leave
         leave.is_active = False
         leave.save()  # updated_at auto-updates
 
@@ -651,21 +653,21 @@ class CancelPendingLeaveView(View):
 class UploadProfileImageView(View):
     def post(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (EMPLOYEE ONLY)
+        #Authorization check (EMPLOYEE ONLY)
         if not is_employee(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Employee access only.'},
                 status=403
             )
 
-        # 📷 Check file
+        #Check file
         image = request.FILES.get('profile_image')
         if not image:
             return JsonResponse(
@@ -688,7 +690,7 @@ class UploadProfileImageView(View):
                 status=400
             )
 
-        # ✅ Save image
+        #Save image
         request.user.profile_image = image
         request.user.save()
 
@@ -702,14 +704,14 @@ class UploadProfileImageView(View):
 class ViewProfileImageView(View):
     def get(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (EMPLOYEE ONLY)
+        #Authorization check (EMPLOYEE ONLY)
         if not is_employee(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Employee access only.'},
@@ -736,7 +738,7 @@ class ProfileManagementView(View):
     # ---------------- VIEW PROFILE ----------------
     def get(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
@@ -765,7 +767,7 @@ class ProfileManagementView(View):
     # ---------------- UPDATE PROFILE ----------------
     def put(self, request):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
@@ -774,7 +776,7 @@ class ProfileManagementView(View):
 
         user = request.user
 
-        # 📥 Parse JSON body
+        #Parse JSON body
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
@@ -783,10 +785,10 @@ class ProfileManagementView(View):
                 status=400
             )
 
-        # ✏️ Allowed fields
+        #Allowed fields
         allowed_fields = ['name']
 
-        # 🚫 Check for forbidden fields
+        #Check for forbidden fields
         for field in data.keys():
             if field not in allowed_fields:
                 return JsonResponse(
@@ -794,14 +796,14 @@ class ProfileManagementView(View):
                     status=400
                 )
 
-        # 🚫 Empty update
+        #Empty update
         if not data:
             return JsonResponse(
                 {'error': 'No data provided for update'},
                 status=400
             )
 
-        # ✅ Update allowed fields
+        #Update allowed fields
         if 'name' in data:
             user.name = data['name']
 
@@ -820,11 +822,11 @@ class ProfileManagementView(View):
 class ApproveLeaveView(View):
     def post(self, request, leave_id):
 
-        # 🔐 Authentication
+        #Authentication
         if request.user.is_anonymous:
             return JsonResponse({'error': 'Authentication required'}, status=401)
 
-        # 🔐 Authorization
+        #Authorization
         if not is_manager(request.user):
             return JsonResponse({'error': 'Manager access only'}, status=403)
 
@@ -833,7 +835,7 @@ class ApproveLeaveView(View):
         except Leave.DoesNotExist:
             return JsonResponse({'error': 'Leave not found'}, status=404)
 
-        # 🔐 Ensure employee belongs to manager
+        #Ensure employee belongs to manager
         if leave.user.manager != request.user:
             return JsonResponse({'error': 'Not authorized for this leave'}, status=403)
 
@@ -851,12 +853,12 @@ class ApproveLeaveView(View):
                 status=400
             )
 
-        # ✅ Update leave
+        #Update leave
         leave.status = action
         leave.approved_by = request.user
         leave.save()
 
-        # 📧 Send email notification
+        #Send email notification
         send_leave_status_email(leave, action)
 
         return JsonResponse(
@@ -872,21 +874,21 @@ class ApproveLeaveView(View):
 class ManagerViewSickLeaveDocumentView(View):
     def get(self, request, leave_id):
 
-        # 🔐 Authentication check
+        #Authentication check
         if request.user.is_anonymous:
             return JsonResponse(
                 {'error': 'Authentication required'},
                 status=401
             )
 
-        # 🔐 Authorization check (MANAGER ONLY)
+        #Authorization check (MANAGER ONLY)
         if not is_manager(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Manager access only.'},
                 status=403
             )
 
-        # 🔍 Fetch leave
+        #Fetch leave
         try:
             leave = Leave.objects.get(id=leave_id, is_active=True)
         except Leave.DoesNotExist:
@@ -895,21 +897,21 @@ class ManagerViewSickLeaveDocumentView(View):
                 status=404
             )
 
-        # 🔐 Ensure leave belongs to manager’s employee
+        #Ensure leave belongs to manager’s employee
         if leave.user.manager != request.user:
             return JsonResponse(
                 {'error': 'You are not authorized to view this document'},
                 status=403
             )
 
-        # 🩺 Ensure sick leave
+        #Ensure sick leave
         if leave.leave_type != 'SICK':
             return JsonResponse(
                 {'error': 'This leave is not a sick leave'},
                 status=400
             )
 
-        # 📄 Fetch document
+        #Fetch document
         try:
             document = leave.documents.first()
         except LeaveDocument.DoesNotExist:
@@ -924,7 +926,7 @@ class ManagerViewSickLeaveDocumentView(View):
                 status=404
             )
 
-        # 📎 Return file securely
+        #Return file securely
         return FileResponse(
             document.file.open('rb'),
             as_attachment=True,
@@ -935,7 +937,7 @@ class ManagerViewSickLeaveDocumentView(View):
 class ExportLeavesView(View):
     def get(self, request):
 
-        # 🔐 Authentication & Authorization (ADMIN ONLY)
+        #Authentication & Authorization (ADMIN ONLY)
         if request.user.is_anonymous or not is_admin(request.user):
             return JsonResponse(
                 {'error': 'Permission denied. Admin access only.'},
@@ -943,7 +945,6 @@ class ExportLeavesView(View):
             )
 
         export_format = request.GET.get('format', 'excel').lower()
-
         leaves = Leave.objects.filter(is_active=True)
 
         if export_format == 'excel':
@@ -963,6 +964,10 @@ class ExportLeavesView(View):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = 'Leave Report'
+
+        # Heading row
+        ws.append(['Leave Report'])
+        ws.append([])
 
         ws.append([
             'Employee ID',
@@ -999,6 +1004,30 @@ class ExportLeavesView(View):
         doc = SimpleDocTemplate(response, pagesize=A4)
         elements = []
 
+        styles = getSampleStyleSheet()
+
+        # 🔹 Title Style
+        title_style = ParagraphStyle(
+            'TitleStyle',
+            parent=styles['Title'],
+            alignment=TA_CENTER,
+            fontSize=18,
+            spaceAfter=20
+        )
+
+        #Add Heading
+        elements.append(Paragraph("Leave Report", title_style))
+
+        #Optional Date
+        elements.append(
+            Paragraph(
+                f"Generated on: {datetime.now().strftime('%d-%m-%Y %H:%M')}",
+                styles['Normal']
+            )
+        )
+        elements.append(Spacer(1, 20))
+
+        #Table data
         data = [[
             'Employee ID',
             'Employee Email',
